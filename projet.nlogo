@@ -14,6 +14,7 @@ butterflies-own
   energy
   sex
   true_col
+  butterfly_type
   size_
   perception_dist
 
@@ -49,11 +50,13 @@ to setup
   create-butterflies butterflies_pop [
     setxy random-xcor random-ycor
     ifelse random-float 1 <= white-moth-frequency [
-      set color sky
-      set true_col white
+      set butterfly_type "white moth"
+      set color  sky + (random-float 0.5)
+      set true_col 8.6 + (random-float 0.5)
     ] [
-      set color black
-      set true_col black
+      set color 1.5 + (random-float 0.5)
+      set true_col 1.5 + (random-float 0.5)
+      set butterfly_type "black moth"
     ]
 
     set shape "butterfly"
@@ -61,7 +64,7 @@ to setup
     set age 0
     let age_min 100
     set age_max random-normal age_min 20
-    set perception_dist random 5
+    set perception_dist  5
     set size 2
   ]
   create-predators predators_pop [
@@ -99,29 +102,21 @@ to go
     [
       set min-epoch min-epoch + pollution-speed
   ]
-  set eat_rate  min-epoch / max-epoch
+  ;set 0 ;eat_rate  min-epoch / max-epoch
   setup-patches
   death
   tick
 end
+
 to setup-patches
   ask patches [
-    let gray-level scale-color white ( min-epoch / 2 ) max-epoch  pcolor;let gray-level scale-color gray min-epoch  max-epoch pcolor
+    let gray-level scale-color white ( min-epoch * 0.8 ) max-epoch  pcolor;let gray-level scale-color gray min-epoch  max-epoch pcolor
     set pcolor gray-level
-
-
   ]
 end
+
 to move
   rt random 60 - 30
-  fd 1
-end
-
-to b_move
-
-  let available-food min-one-of foods in-radius perception_dist [distance myself ]
-
-  rt random 90 - 30
   fd 1
 end
 
@@ -134,13 +129,12 @@ to reproduce
     ]
   ]
 end
+
 to reproduce-if-nearby
   let nearby-butterflies other butterflies with [age > min_reproduction_age] in-radius perception_dist ; Modifier la distance de proximité si nécessaire
 
   if count nearby-butterflies >= 1 and random-float 1 < reproduction_rate and count butterflies < max_pop
   [
-    let self_sex sex
-    let mate one-of nearby-butterflies with [ sex = self_sex ]
     hatch 1
     [
       set color color
@@ -152,26 +146,18 @@ to reproduce-if-nearby
   ]
 end
 
-to eat_food
-  let available-food min-one-of foods in-radius perception_dist [distance myself ]
-  if available-food != nobody
-  [
-    face available-food
-  ]
-
-end
 
 to hunt
 
-  let nearby-butterflies other butterflies in-radius 5
-  let target min-one-of nearby-butterflies with [color = sky]  [distance myself ]
-  let target2 min-one-of nearby-butterflies with [color = black]  [distance myself]
+  let nearby-butterflies other butterflies in-radius 1
+  let target min-one-of nearby-butterflies with [butterfly_type = "white moth"]  [distance myself ]
+  let target2 min-one-of nearby-butterflies with [butterfly_type = "black moth"]  [distance myself]
 
-  ifelse random-float 1 < eat_rate_1 and target != nobody [
+  ifelse random-float 1 < current_eat_rate_white and target != nobody [
     face target
   ]
   [
-    if random-float 1 < eat_rate_2 and target2 != nobody [
+    if random-float 1 < current_eat_rate_black and target2 != nobody [
       face target2
     ]
   ]
@@ -183,29 +169,58 @@ to death
     if random total-turtles > max_pop
       [ die ]
   ]
+
 end
 to eat_prey
   let nearby-butterflies other butterflies in-radius 1
-  let target min-one-of nearby-butterflies with [color = sky]  [distance myself ]
-  let target2 min-one-of nearby-butterflies with [color = black]  [distance myself]
+  let target min-one-of nearby-butterflies   [distance myself ]
 
-  ifelse random-float 1 < eat_rate and target != nobody [
-    ask target [die]
+  if  target != nobody [
+    let col [ true_col ] of target
+    let current_eat_rate 1 - ( color-similarity  pcolor col )
+    if random-float 1 < current_eat_rate [
+      ask target [die]
+    ]
   ]
-  [
-if random-float 1 < (1 - eat_rate) and target2 != nobody [
-   ask target2 [die]
- ]
-]
+
 
 
 end
 
-to-report get-rgb-values [color1]
-  let red-value   extract-hsb color 0
-  let green-value floor (255 * green color1)
-  let blue-value  floor (255 * blue color1)
-  report (list red-value green-value blue-value)
+to-report current_eat_rate_black
+  let x-coordinate 0
+  let y-coordinate 0
+  let patch-color [ pcolor ] of patch x-coordinate y-coordinate
+  report 1 - (color-similarity 1.5 patch-color)
+
+end
+
+to-report current_eat_rate_white
+  let x-coordinate 0
+  let y-coordinate 0
+  let patch-color [ pcolor ] of patch x-coordinate y-coordinate
+  report 1 - (color-similarity 9.9 patch-color)
+end
+
+
+
+to-report color-similarity [color1 color2]
+  let rgb1 extract-rgb color1
+  let rgb2 extract-rgb color2
+
+  let r1 item 0 rgb1
+  let g1 item 1 rgb1
+  let b1 item 2 rgb1
+
+  let r2 item 0 rgb2
+  let g2 item 1 rgb2
+  let b2 item 2 rgb2
+
+  let _distance sqrt ((r2 - r1) ^ 2 + (g2 - g1) ^ 2 + (b2 - b1) ^ 2)
+
+  let similarity 1 - (_distance / sqrt 195075) ; 3*(255^2)
+
+  report similarity
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
@@ -229,17 +244,17 @@ GRAPHICS-WINDOW
 32
 -32
 32
-0
-0
+1
+1
 1
 ticks
 30.0
 
 BUTTON
 0
-10
+23
 63
-43
+56
 setup
 setup \ngo
 NIL
@@ -254,9 +269,9 @@ NIL
 
 BUTTON
 63
-10
+23
 126
-43
+56
 NIL
 go
 T
@@ -296,8 +311,8 @@ true
 false
 "" ""
 PENS
-"Butterflies class 1" 1.0 0 -13791810 true "" "plot count butterflies with [ color = sky] "
-"pen-1" 1.0 0 -15390905 true "" "plot count butterflies with [ color = black] "
+"Butterflies class 1" 1.0 0 -13791810 true "" "plot count butterflies with [ butterfly_type = \"white moth\" ]"
+"pen-1" 1.0 0 -15390905 true "" "plot count butterflies with [ butterfly_type = \"black moth\" ]"
 
 PLOT
 200
@@ -343,77 +358,11 @@ reproduction_rate
 NIL
 HORIZONTAL
 
-PLOT
-0
-301
-200
-451
-Butterfly 
-NIL
-NIL
-0.0
-10.0
-0.0
-10.0
-true
-false
-"" ""
-PENS
-"default" 1.0 0 -16777216 true "" "plot count turtles"
-
-SLIDER
-201
-301
-373
-334
-eat_rate_1
-eat_rate_1
-0
-1
-0.53
-0.01
-1
-NIL
-HORIZONTAL
-
-SLIDER
-201
-335
-373
-368
-eat_rate_2
-eat_rate_2
-0
-1
-0.2
-0.01
-1
-NIL
-HORIZONTAL
-
-PLOT
-0
-449
-200
-599
-reproducted butterflies
-NIL
-NIL
-0.0
-10.0
-0.0
-10.0
-true
-false
-"" ""
-PENS
-"default" 1.0 0 -16777216 true "" "plot reproducted"
-
 SWITCH
-221
-393
-324
-426
+345
+304
+448
+337
 dieable
 dieable
 0
@@ -431,24 +380,6 @@ food_items
 0
 Number
 
-PLOT
-224
-462
-424
-612
-population histogram
-NIL
-NIL
-0.0
-10.0
-0.0
-10.0
-true
-false
-"" ""
-PENS
-"default" 1.0 0 -16777216 true "" "histogram [1] of  butterflies with [ color = blue - 3] "
-
 SLIDER
 173
 55
@@ -458,53 +389,32 @@ white-moth-frequency
 white-moth-frequency
 0
 1
-0.7
+0.8
 0.1
 1
 NIL
 HORIZONTAL
 
-CHOOSER
-350
-388
-488
-433
-environnement
-environnement
-"polluted" "not polluted"
-0
-
-MONITOR
-401
-26
-471
-71
-NIL
-min-epoch
-17
-1
-11
-
 SLIDER
-61
-668
-233
-701
+346
+54
+518
+87
 pollution-speed
 pollution-speed
 0
 200
-0.0
+50.0
 1
 1
 NIL
 HORIZONTAL
 
 MONITOR
-283
-633
-439
-690
+200
+394
+356
+451
 pollution percentage
 (min-epoch / max-epoch) * 100
 5
@@ -512,15 +422,63 @@ pollution percentage
 14
 
 MONITOR
-422
-325
-484
-370
+201
+303
+344
+348
 NIL
-eat_rate
+current_eat_rate_black
 17
 1
 11
+
+MONITOR
+200
+349
+346
+394
+NIL
+current_eat_rate_white
+17
+1
+11
+
+PLOT
+3
+310
+203
+460
+Current eat rate 
+NIL
+NIL
+0.0
+10.0
+0.0
+1.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -16777216 true "" "plot current_eat_rate_black"
+"pen-1" 1.0 0 -7500403 true "" "plot current_eat_rate_white"
+
+PLOT
+0
+460
+200
+610
+pollution percentage
+NIL
+NIL
+0.0
+10.0
+0.0
+100.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -16777216 true "" "plot (min-epoch / max-epoch) * 100"
 
 @#$#@#$#@
 ## WHAT IS IT?

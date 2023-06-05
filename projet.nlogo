@@ -1,4 +1,4 @@
-globals [ reproduction-rate my-plot    age-maximum reproducted min_reproduction_age]
+globals [ reproduction-rate my-plot age-maximum reproducted min_reproduction_age max_pop min-epoch max-epoch eat_rate]
 
 
 breed [ butterflies butterfly ]
@@ -11,52 +11,70 @@ butterflies-own
 [
   age
   age_max
+  energy
+  sex
+  true_col
+  size_
+  perception_dist
+
+]
+
+breed [foods food]
+foods-own
+[
+  energy
 ]
 predators-own
 [
   age
   age_max
+  perception_dist
 ]
 
 to setup
   clear-all
   ;set pcolor white
-  ask patches [set pcolor white]
-  ;set-plot-pen-mode "transparent" ; Définit le mode du stylo comme transparent
+
+
+  ask patches [
+    let gray-level scale-color gray pycor min-pycor max-pycor
+    set pcolor gray-level
+  ]
   set age-maximum 50
-  set predators_pop 5
   set reproducted 0
+  set max_pop 300
   set min_reproduction_age 18
-  ;create-butterflies butterflies_pop [
-   ; setxy random-xcor random-ycor
-  ;  set color one-of [ blue green]; 0 pour les papillons clairs, 1 pour les papillons foncés
-  ;  set age 0
-  ;  let age_min 25
-  ;  set age_max (random 50) + age_min
-  ;]
+  set min-epoch 0
+  set max-epoch 10000
   create-butterflies butterflies_pop [
     setxy random-xcor random-ycor
-    ifelse random 2 = 0 [
+    ifelse random-float 1 <= white-moth-frequency [
       set color sky
-      ;set shape "butterfly-light"
+      set true_col white
     ] [
-      set color 102
-      ;set shape "butterfly-dark"
+      set color black
+      set true_col black
     ]
+
+    set shape "butterfly"
+    set sex one-of ["f" "m"]
     set age 0
-     let age_min 50
-     set age_max (random 50) + age_min
-    set size 1
+    let age_min 100
+    set age_max random-normal age_min 20
+    set perception_dist random 5
+    set size 2
   ]
   create-predators predators_pop [
     setxy random-xcor random-ycor
-    set shape "square"
+    set shape "bird side"
+    set size 3.5
     set color red
     set age 0
     let age_min 50
     set age_max (random 25) + age_min
+
   ]
-  ;set-plot-background-color white
+  ;setup-patches
 
   reset-ticks
 
@@ -64,7 +82,6 @@ end
 
 to go
   ask butterflies [
-    move
     reproduce-if-nearby
     set age age + 1
     if dieable and age > age_max [
@@ -73,19 +90,38 @@ to go
   ]
 
   ask predators [
+    hunt
     move
-    eat
-    ;set age age + 1
-    ;if age > age_max [
-    ;  die ; Les papillons meurent lorsqu'ils atteignent l'âge maximum
-   ; ]
-  ]
+    eat_prey
 
+  ]
+  if min-epoch  <= max-epoch
+    [
+      set min-epoch min-epoch + pollution-speed
+  ]
+  set eat_rate  min-epoch / max-epoch
+  setup-patches
+  death
   tick
 end
+to setup-patches
+  ask patches [
+    let gray-level scale-color white ( min-epoch / 2 ) max-epoch  pcolor;let gray-level scale-color gray min-epoch  max-epoch pcolor
+    set pcolor gray-level
 
+
+  ]
+end
 to move
   rt random 60 - 30
+  fd 1
+end
+
+to b_move
+
+  let available-food min-one-of foods in-radius perception_dist [distance myself ]
+
+  rt random 90 - 30
   fd 1
 end
 
@@ -94,59 +130,92 @@ to reproduce
   if target != nobody and random-float 1 < reproduction_rate [
     hatch 1 [
       set color color
-      set size 1
       move
     ]
   ]
 end
 to reproduce-if-nearby
-  let nearby-butterflies other butterflies with [age > min_reproduction_age] in-radius 1 ; Modifier la distance de proximité si nécessaire
+  let nearby-butterflies other butterflies with [age > min_reproduction_age] in-radius perception_dist ; Modifier la distance de proximité si nécessaire
 
-  if count nearby-butterflies > 1 and random-float 1 < reproduction_rate
+  if count nearby-butterflies >= 1 and random-float 1 < reproduction_rate and count butterflies < max_pop
   [
-    let mate one-of nearby-butterflies
+    let self_sex sex
+    let mate one-of nearby-butterflies with [ sex = self_sex ]
     hatch 1
     [
-      ;setxy mean [xcor] of turtles with [self = myself mate] mean [ycor] of turtles with [self = myself mate]
       set color color
-      set size 1
+      set size size
       move
       set age 0
       set reproducted reproducted + 1
     ]
   ]
 end
-to eat
-  let nearby-butterflies other butterflies in-radius 3
+
+to eat_food
+  let available-food min-one-of foods in-radius perception_dist [distance myself ]
+  if available-food != nobody
+  [
+    face available-food
+  ]
+
+end
+
+to hunt
+
+  let nearby-butterflies other butterflies in-radius 5
   let target min-one-of nearby-butterflies with [color = sky]  [distance myself ]
-  let target2 min-one-of nearby-butterflies with [color = blue - 3]  [distance myself]
+  let target2 min-one-of nearby-butterflies with [color = black]  [distance myself]
 
-  if random-float 1 < eat_rate_1 [
- if target != nobody [
-   ask target [die]
- ]
-]
+  ifelse random-float 1 < eat_rate_1 and target != nobody [
+    face target
+  ]
+  [
+    if random-float 1 < eat_rate_2 and target2 != nobody [
+      face target2
+    ]
+  ]
+end
 
-if random-float 1 < eat_rate_2 [
- if target2 != nobody [
+to death
+  let total-turtles count butterflies
+  ask turtles [
+    if random total-turtles > max_pop
+      [ die ]
+  ]
+end
+to eat_prey
+  let nearby-butterflies other butterflies in-radius 1
+  let target min-one-of nearby-butterflies with [color = sky]  [distance myself ]
+  let target2 min-one-of nearby-butterflies with [color = black]  [distance myself]
+
+  ifelse random-float 1 < eat_rate and target != nobody [
+    ask target [die]
+  ]
+  [
+if random-float 1 < (1 - eat_rate) and target2 != nobody [
    ask target2 [die]
  ]
 ]
 
+
 end
 
-
-
-
+to-report get-rgb-values [color1]
+  let red-value   extract-hsb color 0
+  let green-value floor (255 * green color1)
+  let blue-value  floor (255 * blue color1)
+  report (list red-value green-value blue-value)
+end
 @#$#@#$#@
 GRAPHICS-WINDOW
-501
-10
-907
-417
+513
+38
+1226
+752
 -1
 -1
-12.061
+10.85
 1
 10
 1
@@ -156,12 +225,12 @@ GRAPHICS-WINDOW
 1
 1
 1
--16
-16
--16
-16
-1
-1
+-32
+32
+-32
+32
+0
+0
 1
 ticks
 30.0
@@ -206,7 +275,7 @@ INPUTBOX
 155
 148
 butterflies_pop
-100.0
+75.0
 1
 0
 Number
@@ -228,7 +297,7 @@ false
 "" ""
 PENS
 "Butterflies class 1" 1.0 0 -13791810 true "" "plot count butterflies with [ color = sky] "
-"pen-1" 1.0 0 -15390905 true "" "plot count butterflies with [ color = blue - 3] "
+"pen-1" 1.0 0 -15390905 true "" "plot count butterflies with [ color = black] "
 
 PLOT
 200
@@ -254,7 +323,7 @@ INPUTBOX
 356
 151
 predators_pop
-5.0
+25.0
 1
 0
 Number
@@ -268,7 +337,7 @@ reproduction_rate
 reproduction_rate
 0
 1
-0.82
+1.0
 0.01
 1
 NIL
@@ -301,7 +370,7 @@ eat_rate_1
 eat_rate_1
 0
 1
-0.7
+0.53
 0.01
 1
 NIL
@@ -316,7 +385,7 @@ eat_rate_2
 eat_rate_2
 0
 1
-0.1
+0.2
 0.01
 1
 NIL
@@ -341,15 +410,117 @@ PENS
 "default" 1.0 0 -16777216 true "" "plot reproducted"
 
 SWITCH
-316
-458
-419
-491
+221
+393
+324
+426
 dieable
 dieable
 0
 1
 -1000
+
+INPUTBOX
+355
+90
+510
+150
+food_items
+100.0
+1
+0
+Number
+
+PLOT
+224
+462
+424
+612
+population histogram
+NIL
+NIL
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"default" 1.0 0 -16777216 true "" "histogram [1] of  butterflies with [ color = blue - 3] "
+
+SLIDER
+173
+55
+346
+88
+white-moth-frequency
+white-moth-frequency
+0
+1
+0.7
+0.1
+1
+NIL
+HORIZONTAL
+
+CHOOSER
+350
+388
+488
+433
+environnement
+environnement
+"polluted" "not polluted"
+0
+
+MONITOR
+401
+26
+471
+71
+NIL
+min-epoch
+17
+1
+11
+
+SLIDER
+61
+668
+233
+701
+pollution-speed
+pollution-speed
+0
+200
+0.0
+1
+1
+NIL
+HORIZONTAL
+
+MONITOR
+283
+633
+439
+690
+pollution percentage
+(min-epoch / max-epoch) * 100
+5
+1
+14
+
+MONITOR
+422
+325
+484
+370
+NIL
+eat_rate
+17
+1
+11
 
 @#$#@#$#@
 ## WHAT IS IT?
@@ -402,6 +573,12 @@ arrow
 true
 0
 Polygon -7500403 true true 150 0 0 150 105 150 105 293 195 293 195 150 300 150
+
+bird side
+false
+0
+Polygon -7500403 true true 0 120 45 90 75 90 105 120 150 120 240 135 285 120 285 135 300 150 240 150 195 165 255 195 210 195 150 210 90 195 60 180 45 135
+Circle -16777216 true false 38 98 14
 
 box
 false
